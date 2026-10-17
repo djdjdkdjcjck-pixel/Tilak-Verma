@@ -1,0 +1,8 @@
+{
+  "name": "JARVIS Assistant",
+  "description": "An advanced Iron Man JARVIS voice assistant with 24/7 background listening, instant tool generation, and full device control.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
