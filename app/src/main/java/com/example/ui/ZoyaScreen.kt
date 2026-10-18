@@ -126,8 +126,9 @@ fun ZoyaScreen(
     onStopService: () -> Unit
 ) {
     val context = LocalContext.current
-    val prefs = remember { context.getSharedPreferences("JoyaVisualPrefs", Context.MODE_PRIVATE) }
-    var customPictureUri by remember { mutableStateOf(prefs.getString("joya_custom_image", null)) }
+    val prefs = remember { context.getSharedPreferences("ZoyaPrefs", Context.MODE_PRIVATE) }
+    val visualPrefs = remember { context.getSharedPreferences("JoyaVisualPrefs", Context.MODE_PRIVATE) }
+    var customPictureUri by remember { mutableStateOf(visualPrefs.getString("joya_custom_image", null)) }
 
     var showPermissionsDialog by remember { mutableStateOf(!isPermissionGranted) }
     var currentScreen by remember { mutableStateOf("main") } // "main" or "settings"
@@ -234,9 +235,17 @@ fun ZoyaScreen(
 
                 // 3 Status Lines
                 val micStatusText = if (activeService != null) "Mic: chal raha hai" else "Mic: band"
-                val heardText = activeService?.liveSessionManager?.lastSpokenText?.collectAsState()?.value ?: "Suna: (kuch nahi)"
-                val apiKeyVal = prefs.getString("gemini_api_key", "") ?: ""
-                val geminiStatusText = if (apiKeyVal.isNotBlank()) "Gemini: key hai" else "Gemini: key nahi hai"
+                val heardText = activeService?.liveSessionManager?.lastSpokenText?.collectAsState()?.value ?: "(kuch nahi)"
+                val rawApiKey = (prefs.getString("gemini_api_key", "") ?: "").ifBlank { prefs.getString("api_key", "") ?: "" }
+                val apiKeyVal = rawApiKey.trim()
+                val geminiStatusText = when {
+                    heardText.startsWith("Gemini Error:", ignoreCase = true) || heardText.startsWith("Error:", ignoreCase = true) -> heardText
+                    apiKeyVal.isNotBlank() -> {
+                        val prefix = if (apiKeyVal.length >= 4) apiKeyVal.take(4) else apiKeyVal
+                        "Gemini: key hai (shuruaat: $prefix)"
+                    }
+                    else -> "Gemini: key nahi hai"
+                }
 
                 Column(
                     modifier = Modifier
@@ -249,7 +258,12 @@ fun ZoyaScreen(
                 ) {
                     Text(text = micStatusText, color = Color(0xFF00E676), fontSize = 12.sp, fontWeight = FontWeight.Medium)
                     Text(text = "Suna: $heardText", color = Color(0xFF00E5FF), fontSize = 12.sp, fontWeight = FontWeight.Medium)
-                    Text(text = geminiStatusText, color = if (apiKeyVal.isNotBlank()) Color(0xFF00E676) else Color(0xFFFF5252), fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                    Text(
+                        text = geminiStatusText,
+                        color = if (apiKeyVal.isNotBlank() && !geminiStatusText.contains("Error", true)) Color(0xFF00E676) else Color(0xFFFF5252),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
+                    )
                 }
 
                 Spacer(modifier = Modifier.weight(1f))
@@ -337,10 +351,10 @@ fun JarvisSettingsScreen(
         mutableStateOf(zoyaPrefs.getBoolean("jarvis_master_enabled", isServiceRunning))
     }
     var geminiKeyInput by remember {
-        mutableStateOf(zoyaPrefs.getString("gemini_api_key", "") ?: "")
+        mutableStateOf(((zoyaPrefs.getString("gemini_api_key", "") ?: "").ifBlank { zoyaPrefs.getString("api_key", "") ?: "" }).trim())
     }
     var groqKeysInput by remember {
-        mutableStateOf(zoyaPrefs.getString("groq_api_keys", "") ?: "")
+        mutableStateOf((zoyaPrefs.getString("groq_api_keys", "") ?: "").trim())
     }
 
     val hasOverlayPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -494,7 +508,7 @@ fun JarvisSettingsScreen(
                 Spacer(modifier = Modifier.height(8.dp))
                 Button(
                     onClick = {
-                        zoyaPrefs.edit().putString("gemini_api_key", geminiKeyInput).apply()
+                        zoyaPrefs.edit().putString("gemini_api_key", geminiKeyInput.trim()).apply()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD700)),
                     modifier = Modifier.align(Alignment.End)

@@ -383,7 +383,7 @@ class LiveSessionManager(
 
     private fun getResolvedApiKey(): String {
         val prefs = context.getSharedPreferences("ZoyaPrefs", Context.MODE_PRIVATE)
-        val savedKey = prefs.getString("api_key", "") ?: ""
+        val savedKey = (prefs.getString("gemini_api_key", "") ?: "").ifBlank { prefs.getString("api_key", "") ?: "" }
         if (savedKey.isNotBlank()) return savedKey.trim()
 
         val buildKey = BuildConfig.GEMINI_API_KEY
@@ -398,7 +398,7 @@ class LiveSessionManager(
 
         val apiKey = getResolvedApiKey()
         if (apiKey.isEmpty()) {
-            _lastSpokenText.value = "Gemini API key is required. Please set it in Settings!"
+            _lastSpokenText.value = "Gemini Error: key nahi hai"
             _zoyaState.value = ZoyaState.IDLE
             return
         }
@@ -429,9 +429,10 @@ class LiveSessionManager(
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 val errorBody = response?.body?.string() ?: ""
-                Log.e(TAG, "WebSocket failure: ${t.message} | Response: $errorBody", t)
+                val errMessage = t.message ?: "unknown error"
+                Log.e(TAG, "WebSocket failure: $errMessage | Response: $errorBody", t)
                 _zoyaState.value = ZoyaState.IDLE
-                _lastSpokenText.value = "Uplink disconnected. Tap orb to retry."
+                _lastSpokenText.value = "Gemini Error: $errMessage $errorBody".trim()
                 this@LiveSessionManager.webSocket = null
             }
 

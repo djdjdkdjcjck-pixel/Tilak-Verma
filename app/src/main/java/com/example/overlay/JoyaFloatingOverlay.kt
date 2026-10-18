@@ -10,6 +10,8 @@ import android.graphics.PixelFormat
 import android.graphics.RectF
 import android.graphics.SweepGradient
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.util.Log
 import android.view.Gravity
@@ -61,31 +63,39 @@ class JoyaFloatingOverlay(private val service: ZoyaForegroundService) {
             return
         }
 
-        try {
-            val view = JoyaCircleView(service)
-            setupTouchListener(view)
-            windowManager?.addView(view, layoutParams)
-            overlayView = view
-            isShowing = true
-            Log.i(TAG, "Joya circular floating indicator shown successfully.")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to add floating overlay view", e)
+        Handler(Looper.getMainLooper()).post {
+            if (isShowing) return@post
+            try {
+                val view = JoyaCircleView(service)
+                setupTouchListener(view)
+                windowManager?.addView(view, layoutParams)
+                overlayView = view
+                isShowing = true
+                Log.i(TAG, "Joya circular floating indicator shown successfully.")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to add floating overlay view", e)
+            }
         }
     }
 
     fun updateState(state: ZoyaState) {
-        overlayView?.setAssistantState(state)
+        Handler(Looper.getMainLooper()).post {
+            overlayView?.setAssistantState(state)
+        }
     }
 
     fun hide() {
         if (!isShowing) return
-        try {
-            overlayView?.let { windowManager?.removeView(it) }
-            overlayView = null
-            isShowing = false
-            Log.i(TAG, "Joya floating overlay removed.")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to remove floating overlay view", e)
+        Handler(Looper.getMainLooper()).post {
+            if (!isShowing) return@post
+            try {
+                overlayView?.let { windowManager?.removeView(it) }
+                overlayView = null
+                isShowing = false
+                Log.i(TAG, "Joya floating overlay removed.")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to remove floating overlay view", e)
+            }
         }
     }
 
@@ -201,39 +211,41 @@ class JoyaFloatingOverlay(private val service: ZoyaForegroundService) {
         }
 
         fun setAssistantState(state: ZoyaState) {
-            if (currentState == state) return
-            currentState = state
-            when (state) {
-                ZoyaState.LISTENING -> {
-                    animator.duration = 900L
-                    val col = Color.rgb(255, 23, 68) // Laal (Red)
-                    centerCorePaint.color = col
-                    ringPaint.color = col
-                    glowPaint.color = Color.argb(80, 255, 23, 68)
+            Handler(Looper.getMainLooper()).post {
+                if (currentState == state) return@post
+                currentState = state
+                when (state) {
+                    ZoyaState.LISTENING -> {
+                        animator.duration = 900L
+                        val col = Color.rgb(255, 23, 68) // Laal (Red)
+                        centerCorePaint.color = col
+                        ringPaint.color = col
+                        glowPaint.color = Color.argb(80, 255, 23, 68)
+                    }
+                    ZoyaState.SPEAKING -> {
+                        animator.duration = 600L
+                        val col = Color.rgb(41, 121, 255) // Neela (Blue)
+                        centerCorePaint.color = col
+                        ringPaint.color = col
+                        glowPaint.color = Color.argb(80, 41, 121, 255)
+                    }
+                    ZoyaState.THINKING -> {
+                        animator.duration = 1100L
+                        val col = Color.rgb(0, 230, 118) // Hara (Green)
+                        centerCorePaint.color = col
+                        ringPaint.color = col
+                        glowPaint.color = Color.argb(80, 0, 230, 118)
+                    }
+                    ZoyaState.IDLE -> {
+                        animator.duration = 2000L
+                        val col = Color.rgb(255, 230, 0) // Peela (Yellow)
+                        centerCorePaint.color = col
+                        ringPaint.color = col
+                        glowPaint.color = Color.argb(80, 255, 230, 0)
+                    }
                 }
-                ZoyaState.SPEAKING -> {
-                    animator.duration = 600L
-                    val col = Color.rgb(41, 121, 255) // Neela (Blue)
-                    centerCorePaint.color = col
-                    ringPaint.color = col
-                    glowPaint.color = Color.argb(80, 41, 121, 255)
-                }
-                ZoyaState.THINKING -> {
-                    animator.duration = 1100L
-                    val col = Color.rgb(0, 230, 118) // Hara (Green)
-                    centerCorePaint.color = col
-                    ringPaint.color = col
-                    glowPaint.color = Color.argb(80, 0, 230, 118)
-                }
-                ZoyaState.IDLE -> {
-                    animator.duration = 2000L
-                    val col = Color.rgb(255, 230, 0) // Peela (Yellow)
-                    centerCorePaint.color = col
-                    ringPaint.color = col
-                    glowPaint.color = Color.argb(80, 255, 230, 0)
-                }
+                invalidate()
             }
-            invalidate()
         }
 
         override fun onDetachedFromWindow() {

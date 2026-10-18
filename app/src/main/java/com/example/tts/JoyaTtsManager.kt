@@ -111,10 +111,14 @@ class JoyaTtsManager(private val context: Context) : TextToSpeech.OnInitListener
 
     private fun speakInternal(text: String, queueMode: Int = TextToSpeech.QUEUE_FLUSH) {
         try {
+            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager
+            val maxVol = audioManager?.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC) ?: 15
+            audioManager?.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, maxVol, 0)
+
             val params = Bundle()
             params.putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, "jarvis_speech_${System.currentTimeMillis()}")
             tts?.speak(text, queueMode, params, "jarvis_utterance")
-            Log.i(TAG, "Spoken aloud: '$text'")
+            Log.i(TAG, "Spoken aloud at full volume: '$text'")
         } catch (e: Exception) {
             Log.e(TAG, "Error speaking text", e)
         }

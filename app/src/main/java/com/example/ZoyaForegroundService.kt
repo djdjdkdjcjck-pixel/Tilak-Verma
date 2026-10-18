@@ -166,7 +166,7 @@ class ZoyaForegroundService : Service() {
         floatingOverlay = JoyaFloatingOverlay(this)
         floatingOverlay?.show()
 
-        scope.launch {
+        scope.launch(Dispatchers.Main) {
             liveSessionManager.zoyaState.collect { state ->
                 _currentState.value = state
                 updateNotificationForState(state)
@@ -236,6 +236,10 @@ class ZoyaForegroundService : Service() {
 
     private fun initAudioTrack() {
         try {
+            val audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+            val maxVol = audioManager?.getStreamMaxVolume(AudioManager.STREAM_MUSIC) ?: 15
+            audioManager?.setStreamVolume(AudioManager.STREAM_MUSIC, maxVol, 0)
+
             val minBuf = AudioTrack.getMinBufferSize(outputSampleRate, outChannelConfig, audioFormat)
             val bufferSize = if (minBuf > 0) minBuf * 4 else 8192
 
