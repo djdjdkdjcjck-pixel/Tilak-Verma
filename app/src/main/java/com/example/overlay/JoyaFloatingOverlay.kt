@@ -2,6 +2,7 @@ package com.example.overlay
 
 import android.animation.ValueAnimator
 import android.content.Context
+import android.content.Intent
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -36,8 +37,8 @@ class JoyaFloatingOverlay(private val service: ZoyaForegroundService) {
     private var isShowing = false
 
     private val layoutParams = WindowManager.LayoutParams().apply {
-        width = dpToPx(50)
-        height = dpToPx(50)
+        width = dpToPx(56)
+        height = dpToPx(56)
         type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
         } else {
@@ -48,9 +49,9 @@ class JoyaFloatingOverlay(private val service: ZoyaForegroundService) {
                 WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
         format = PixelFormat.TRANSLUCENT
-        gravity = Gravity.TOP or Gravity.START
-        x = service.resources.displayMetrics.widthPixels - dpToPx(65)
-        y = dpToPx(140) // safely below status bar, time, and battery icons
+        gravity = Gravity.BOTTOM or Gravity.END
+        x = dpToPx(20)
+        y = dpToPx(120)
     }
 
     fun show() {
@@ -123,6 +124,10 @@ class JoyaFloatingOverlay(private val service: ZoyaForegroundService) {
                     }
                     MotionEvent.ACTION_UP -> {
                         if (isClick) {
+                            val intent = Intent(service, com.example.MainActivity::class.java).apply {
+                                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                            }
+                            service.startActivity(intent)
                             service.triggerManualListening()
                         }
                         return true
@@ -201,20 +206,31 @@ class JoyaFloatingOverlay(private val service: ZoyaForegroundService) {
             when (state) {
                 ZoyaState.LISTENING -> {
                     animator.duration = 900L
-                    centerCorePaint.color = Color.rgb(0, 230, 255) // Cyan active
-                    ringPaint.color = Color.rgb(0, 230, 255)
+                    val col = Color.rgb(255, 23, 68) // Laal (Red)
+                    centerCorePaint.color = col
+                    ringPaint.color = col
+                    glowPaint.color = Color.argb(80, 255, 23, 68)
                 }
                 ZoyaState.SPEAKING -> {
                     animator.duration = 600L
-                    centerCorePaint.color = Color.rgb(255, 180, 0) // Gold amber
+                    val col = Color.rgb(41, 121, 255) // Neela (Blue)
+                    centerCorePaint.color = col
+                    ringPaint.color = col
+                    glowPaint.color = Color.argb(80, 41, 121, 255)
                 }
                 ZoyaState.THINKING -> {
                     animator.duration = 1100L
-                    centerCorePaint.color = Color.rgb(180, 100, 255) // Purple thinking
+                    val col = Color.rgb(0, 230, 118) // Hara (Green)
+                    centerCorePaint.color = col
+                    ringPaint.color = col
+                    glowPaint.color = Color.argb(80, 0, 230, 118)
                 }
                 ZoyaState.IDLE -> {
                     animator.duration = 2000L
-                    centerCorePaint.color = Color.rgb(255, 215, 0) // Classic Gold
+                    val col = Color.rgb(255, 230, 0) // Peela (Yellow)
+                    centerCorePaint.color = col
+                    ringPaint.color = col
+                    glowPaint.color = Color.argb(80, 255, 230, 0)
                 }
             }
             invalidate()
@@ -243,7 +259,12 @@ class JoyaFloatingOverlay(private val service: ZoyaForegroundService) {
             canvas.save()
             canvas.rotate(rotationAngle, cx, cy)
             val coilPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = if (currentState == ZoyaState.LISTENING) Color.rgb(0, 229, 255) else Color.rgb(255, 215, 0)
+                color = when (currentState) {
+                    ZoyaState.LISTENING -> Color.rgb(255, 23, 68)
+                    ZoyaState.SPEAKING -> Color.rgb(41, 121, 255)
+                    ZoyaState.THINKING -> Color.rgb(0, 230, 118)
+                    ZoyaState.IDLE -> Color.rgb(255, 230, 0)
+                }
                 strokeWidth = 3f
                 style = Paint.Style.STROKE
             }

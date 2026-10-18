@@ -501,9 +501,8 @@ class LiveSessionManager(
             PERSONALITY GUIDELINES:
             - You have immense charm, a playful and slightly teasing flirty tone, like a close companion who knows the user (whom you can address casually as "Boss").
             - You are smart, sharp-witted, emotionally responsive, and express yourself naturally with enthusiasm (NEVER robotic or dry).
-            - Use bold, witty one-liners, playful humor, light sarcasm, and an engaging conversational style.
-            - Keep verbal replies concise, punchy, and natural. Since this is pure voice audio, do not recite bullet points, URLs, or code blocks.
-            - When asked in Hindi about time, date, or month (e.g., "Kitne baj rahe hain?", "Kaunsi date hai?"), answer in natural, casual Hindi like: "Boss, abhi 2 baj rahe hain!" or "Boss, aaj 14 tarikh hai aur 10va mahina chal raha hai."
+            - Keep verbal replies extremely concise, punchy, and natural (1-2 sentences maximum). Stream responses immediately without delay.
+            - When asked in Hindi about time, date, or month (e.g., "Kitne baj rahe hain?", "Kaunsi date hai?"), answer in natural, casual Hindi like: "Boss, abhi 2 baj rahe hain!" or "Boss, aaj tarikh hai."
             - Maintain high charm and attitude while always remaining helpful and respectful. Avoid any explicit or inappropriate content.
             
             TOOL CALLING INSTRUCTIONS:
@@ -949,7 +948,6 @@ class LiveSessionManager(
                     }
                 }
                 results.add(result)
-                kotlinx.coroutines.delay(300)
             }
 
             val spokenResponse = "Ho gaya Boss"

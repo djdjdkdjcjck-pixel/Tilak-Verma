@@ -139,25 +139,6 @@ fun ZoyaScreen(
     val micLevel = liveManager?.micLevel?.collectAsState()?.value ?: 0f
     val speakerLevel = liveManager?.speakerLevel?.collectAsState()?.value ?: 0f
 
-    val edgeTransition = rememberInfiniteTransition(label = "EdgeGlowTransition")
-    val edgePulse by edgeTransition.animateFloat(
-        initialValue = 0.4f,
-        targetValue = 1.0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(900, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "EdgePulse"
-    )
-
-    val edgeColor = when {
-        activeService == null -> Color(0xFFFFEA00) // Yellow when idle/off
-        zoyaState == ZoyaState.LISTENING -> Color(0xFFFF1744) // Red when listening
-        zoyaState == ZoyaState.SPEAKING -> Color(0xFF2979FF) // Blue when speaking
-        zoyaState == ZoyaState.THINKING -> Color(0xFF00E676) // Green when processing
-        else -> Color(0xFFFFEA00) // Yellow default
-    }
-
     val insetsTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val insetsBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
@@ -175,28 +156,6 @@ fun ZoyaScreen(
                 .background(Color(0xFF000000))
                 .padding(top = insetsTop, bottom = insetsBottom)
         ) {
-            // Colorful Edge / Border Glow Lighting Effect around screen edges
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                val strokeWidth = 5.dp.toPx()
-                val w = size.width
-                val h = size.height
-
-                // Outer edge glow
-                drawRect(
-                    color = edgeColor.copy(alpha = edgePulse * 0.85f),
-                    topLeft = Offset.Zero,
-                    size = size,
-                    style = Stroke(width = strokeWidth)
-                )
-
-                // Inner soft ambient glow line
-                drawRect(
-                    color = edgeColor.copy(alpha = edgePulse * 0.35f),
-                    topLeft = Offset(strokeWidth, strokeWidth),
-                    size = Size(w - strokeWidth * 2, h - strokeWidth * 2),
-                    style = Stroke(width = strokeWidth * 0.6f)
-                )
-            }
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -211,10 +170,10 @@ fun ZoyaScreen(
 
                 Spacer(modifier = Modifier.weight(1f))
 
-                // CENTER VISUAL: SUN / ORB ANIMATION
+                // CENTER VISUAL: IRON MAN JARVIS ARC REACTOR ORB
                 Box(
                     modifier = Modifier
-                        .size(280.dp)
+                        .size(260.dp)
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null
@@ -249,12 +208,62 @@ fun ZoyaScreen(
                     }
                 }
 
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // Large Talk Button
+                Button(
+                    onClick = {
+                        if (activeService == null) {
+                            onStartService()
+                        }
+                        activeService?.liveSessionManager?.startSession()
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth(0.75f)
+                        .height(50.dp)
+                        .testTag("talk_button"),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD700)),
+                    shape = RoundedCornerShape(25.dp)
+                ) {
+                    Icon(imageVector = Icons.Default.Mic, contentDescription = "Talk", tint = Color.Black)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Talk / बात करें", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // 3 Status Lines
+                val micStatusText = if (activeService != null) "Mic: chal raha hai" else "Mic: band"
+                val heardText = activeService?.liveSessionManager?.lastSpokenText?.collectAsState()?.value ?: "Suna: (kuch nahi)"
+                val apiKeyVal = prefs.getString("gemini_api_key", "") ?: ""
+                val geminiStatusText = if (apiKeyVal.isNotBlank()) "Gemini: key hai" else "Gemini: key nahi hai"
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF111111), RoundedCornerShape(12.dp))
+                        .border(1.dp, Color(0xFF222222), RoundedCornerShape(12.dp))
+                        .padding(12.dp),
+                    horizontalAlignment = Alignment.Start,
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(text = micStatusText, color = Color(0xFF00E676), fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                    Text(text = "Suna: $heardText", color = Color(0xFF00E5FF), fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                    Text(text = geminiStatusText, color = if (apiKeyVal.isNotBlank()) Color(0xFF00E676) else Color(0xFFFF5252), fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                }
+
                 Spacer(modifier = Modifier.weight(1f))
 
-                // BOTTOM STATUS BAR
-                CleanDiscreetStatusIndicator(isServiceRunning = activeService != null)
+                // Bottom Wake Word Text
+                Text(
+                    text = "बोलें 'Jarvis' • हैंड्स-फ्री सक्रिय",
+                    color = Color(0xFFFFD700),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    textAlign = TextAlign.Center
+                )
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(16.dp))
             }
         }
     }
@@ -327,9 +336,6 @@ fun JarvisSettingsScreen(
     var jarvisEnabled by remember {
         mutableStateOf(zoyaPrefs.getBoolean("jarvis_master_enabled", isServiceRunning))
     }
-    var edgeLightsEnabled by remember {
-        mutableStateOf(zoyaPrefs.getBoolean("edge_lighting_enabled", true))
-    }
     var geminiKeyInput by remember {
         mutableStateOf(zoyaPrefs.getString("gemini_api_key", "") ?: "")
     }
@@ -339,7 +345,9 @@ fun JarvisSettingsScreen(
 
     val hasOverlayPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
         AndroidSettings.canDrawOverlays(context)
-    } else true
+    } else {
+        true
+    }
 
     val statusLine = when {
         !hasOverlayPermission -> "Overlay permission nahi hai"
@@ -454,46 +462,6 @@ fun JarvisSettingsScreen(
                     },
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // 3. Edge Lights Switch
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF141414)),
-            shape = RoundedCornerShape(16.dp),
-            border = BorderStroke(1.dp, Color(0xFF262626))
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text(
-                        text = "Edge lights",
-                        color = Color.White,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "Four-side glowing screen border",
-                        color = Color.Gray,
-                        fontSize = 12.sp
-                    )
-                }
-                Switch(
-                    checked = edgeLightsEnabled,
-                    onCheckedChange = { enabled ->
-                        edgeLightsEnabled = enabled
-                        zoyaPrefs.edit().putBoolean("edge_lighting_enabled", enabled).apply()
-                    },
-                    colors = SwitchDefaults.colors(checkedThumbColor = Color(0xFFFFD700))
                 )
             }
         }
@@ -715,21 +683,14 @@ fun CustomPictureFrame(
     }
 }
 
-private data class ReactorPalette(
-    val coreGlow: Color,
-    val ringColor: Color,
-    val coilColor: Color,
-    val arcColor: Color,
-    val auraColor: Color
-)
-
 /**
- * Iron Man JARVIS Arc Reactor Core
- * - Active: Authentic dual cardiac heartbeat ("dil jaisa dhak-dhak dhadke").
- * - Listening: Fast pulse, intense electric cyan, audio-reactive with voice amplitude.
- * - Speaking: Radiant gold/amber coronal rays and soundwave flares.
- * - Stopped/Off: Slow, calm, dim resting state.
- * - Interactive: Tap to turn on/off.
+ * Iron Man JARVIS Arc Reactor Core ("wow" premium design)
+ * - Center 3D glass radial gradient core
+ * - 3-4 concentric rotating rings with tachometer ticks and dashed pattern
+ * - Floating glowing particles
+ * - Breathing soft glow behind orb
+ * - State-based colors: idle=yellow/gold, listening=red, processing=green, speaking=blue
+ * - Audio-reactive volume pulsing
  */
 @Composable
 fun JarvisArcReactorCore(
@@ -740,17 +701,18 @@ fun JarvisArcReactorCore(
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "JarvisReactorTransition")
 
-    // Continuous rotation of outer ring
+    // Rotation 1 (Clockwise outer ring)
     val outerRotation by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 360f,
         animationSpec = infiniteRepeatable(
             animation = tween(
                 durationMillis = when {
-                    !isServiceRunning -> 10000
-                    state == ZoyaState.LISTENING -> 2200
-                    state == ZoyaState.SPEAKING -> 1800
-                    else -> 4500
+                    !isServiceRunning -> 12000
+                    state == ZoyaState.LISTENING -> 2000
+                    state == ZoyaState.SPEAKING -> 1200
+                    state == ZoyaState.THINKING -> 2500
+                    else -> 6000
                 },
                 easing = LinearEasing
             ),
@@ -759,17 +721,18 @@ fun JarvisArcReactorCore(
         label = "OuterRotation"
     )
 
-    // Counter-rotation of inner ring
+    // Rotation 2 (Counter-clockwise inner ring)
     val innerRotation by infiniteTransition.animateFloat(
         initialValue = 360f,
         targetValue = 0f,
         animationSpec = infiniteRepeatable(
             animation = tween(
                 durationMillis = when {
-                    !isServiceRunning -> 8000
-                    state == ZoyaState.LISTENING -> 1600
-                    state == ZoyaState.SPEAKING -> 1400
-                    else -> 3600
+                    !isServiceRunning -> 10000
+                    state == ZoyaState.LISTENING -> 1500
+                    state == ZoyaState.SPEAKING -> 900
+                    state == ZoyaState.THINKING -> 2000
+                    else -> 5000
                 },
                 easing = LinearEasing
             ),
@@ -778,42 +741,30 @@ fun JarvisArcReactorCore(
         label = "InnerRotation"
     )
 
-    // "dil jaisa dhak-dhak dhadke" - Stable, smooth cardiac dual-beat pulse animation
-    val heartbeatScale by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = 1f,
+    // Breathing pulse scale
+    val breathScale by infiniteTransition.animateFloat(
+        initialValue = 0.96f,
+        targetValue = 1.05f,
         animationSpec = infiniteRepeatable(
-            animation = keyframes {
+            animation = tween(
                 durationMillis = when {
-                    !isServiceRunning -> 4000
-                    state == ZoyaState.LISTENING -> 800
-                    state == ZoyaState.SPEAKING -> 900
-                    else -> 1500
-                }
-                if (isServiceRunning) {
-                    1.0f at 0
-                    1.08f at 200 with FastOutSlowInEasing // smooth lub
-                    1.02f at 400 with FastOutSlowInEasing
-                    1.06f at 600 with FastOutSlowInEasing // smooth dub
-                    1.0f at 800 with FastOutSlowInEasing
-                    1.0f at durationMillis
-                } else {
-                    1.0f at 0
-                    0.98f at 2000 with FastOutSlowInEasing
-                    1.0f at durationMillis
-                }
-            },
-            repeatMode = RepeatMode.Restart
+                    state == ZoyaState.LISTENING -> 500
+                    state == ZoyaState.SPEAKING -> 350
+                    else -> 1800
+                },
+                easing = FastOutSlowInEasing
+            ),
+            repeatMode = RepeatMode.Reverse
         ),
-        label = "HeartbeatScale"
+        label = "BreathScale"
     )
 
     val glowPulse by infiniteTransition.animateFloat(
-        initialValue = 0.65f, // never drop too dark
-        targetValue = 0.95f,
+        initialValue = 0.5f,
+        targetValue = 1.0f,
         animationSpec = infiniteRepeatable(
             animation = tween(
-                durationMillis = if (state == ZoyaState.LISTENING) 600 else 1200,
+                durationMillis = 800,
                 easing = FastOutSlowInEasing
             ),
             repeatMode = RepeatMode.Reverse
@@ -829,109 +780,112 @@ fun JarvisArcReactorCore(
             val cx = size.width / 2f
             val cy = size.height / 2f
 
-            val safeBoost = when (state) {
-                ZoyaState.LISTENING -> (micLevel * 0.04f).coerceIn(0f, 0.05f)
-                ZoyaState.SPEAKING -> (speakerLevel * 0.04f).coerceIn(0f, 0.05f)
+            val audioBoost = when (state) {
+                ZoyaState.LISTENING -> (micLevel * 0.18f).coerceIn(0f, 0.2f)
+                ZoyaState.SPEAKING -> (speakerLevel * 0.25f).coerceIn(0f, 0.3f)
                 else -> 0f
             }
-            val scale = (heartbeatScale + safeBoost).coerceIn(0.98f, 1.10f)
-            val baseRadius = (size.minDimension * 0.32f) * scale
 
-            val palette = when {
-                !isServiceRunning -> ReactorPalette(
-                    coreGlow = Color(0xFF374151),
-                    ringColor = Color(0xFF1F2937),
-                    coilColor = Color(0xFF4B5563),
-                    arcColor = Color(0xFF6B7280),
-                    auraColor = Color(0x2238BDF8)
-                )
-                state == ZoyaState.LISTENING -> ReactorPalette(
-                    coreGlow = Color(0xFFFFFFFF),
-                    ringColor = Color(0xFF00E5FF),
-                    coilColor = Color(0xFF00B0FF),
-                    arcColor = Color(0xFF00E5FF),
-                    auraColor = Color(0xFF00E5FF)
-                )
-                state == ZoyaState.SPEAKING -> ReactorPalette(
-                    coreGlow = Color(0xFFFFF9C4),
-                    ringColor = Color(0xFFFFD700),
-                    coilColor = Color(0xFFFF9100),
-                    arcColor = Color(0xFFFFAB00),
-                    auraColor = Color(0xFFFFD700)
-                )
-                state == ZoyaState.THINKING -> ReactorPalette(
-                    coreGlow = Color(0xFFF3E5F5),
-                    ringColor = Color(0xFFE040FB),
-                    coilColor = Color(0xFF7C4DFF),
-                    arcColor = Color(0xFFBA68C8),
-                    auraColor = Color(0xFF7C4DFF)
-                )
-                else -> ReactorPalette(
-                    coreGlow = Color(0xFFE0F7FA),
-                    ringColor = Color(0xFF00E5FF),
-                    coilColor = Color(0xFFFFD700),
-                    arcColor = Color(0xFF00E5FF),
-                    auraColor = Color(0xFF00E5FF)
-                )
+            val scale = (breathScale + audioBoost).coerceIn(0.90f, 1.20f)
+            val baseRadius = (size.minDimension * 0.38f) * scale
+
+            // Colors: idle = yellow/gold, listening = red, processing = green, speaking = blue
+            val primaryColor = when {
+                !isServiceRunning -> Color(0xFF555555)
+                state == ZoyaState.LISTENING -> Color(0xFFFF1744) // Red
+                state == ZoyaState.SPEAKING -> Color(0xFF2979FF)  // Blue
+                state == ZoyaState.THINKING -> Color(0xFF00E676)  // Green
+                else -> Color(0xFFFFEA00)                       // Yellow / Gold (Idle)
             }
 
-            // 1. Arc Reactor Ambient Halo Radiation
+            val secondaryColor = when {
+                !isServiceRunning -> Color(0xFF333333)
+                state == ZoyaState.LISTENING -> Color(0xFFFF5252)
+                state == ZoyaState.SPEAKING -> Color(0xFF00E5FF)
+                state == ZoyaState.THINKING -> Color(0xFF69F0AE)
+                else -> Color(0xFFFFD700)
+            }
+
+            // 1. Soft breathing glow behind the orb (Ambient Aura)
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(
-                        palette.auraColor.copy(alpha = if (isServiceRunning) glowPulse * 0.45f else 0.10f),
-                        palette.auraColor.copy(alpha = if (isServiceRunning) glowPulse * 0.15f else 0.03f),
+                        primaryColor.copy(alpha = if (isServiceRunning) glowPulse * 0.6f else 0.12f),
+                        primaryColor.copy(alpha = if (isServiceRunning) glowPulse * 0.25f else 0.04f),
                         Color.Transparent
                     ),
                     center = Offset(cx, cy),
-                    radius = baseRadius * 1.9f
+                    radius = baseRadius * 2.3f
                 ),
-                radius = baseRadius * 1.9f,
+                radius = baseRadius * 2.3f,
                 center = Offset(cx, cy)
             )
 
-            // 2. Soundwave radiation / coronal rays for speaking or listening
-            if (isServiceRunning && (state == ZoyaState.LISTENING || state == ZoyaState.SPEAKING)) {
-                val rayCount = if (state == ZoyaState.SPEAKING) 20 else 12
-                for (i in 0 until rayCount) {
-                    val angle = Math.toRadians((i * (360.0 / rayCount) + outerRotation).toDouble())
-                    val rayLen = baseRadius * (1.18f + (sin(angle * 4 + outerRotation * 0.05).toFloat() * 0.22f) + (safeBoost * 0.2f))
-                    val x1 = cx + (baseRadius * 0.95f * cos(angle)).toFloat()
-                    val y1 = cy + (baseRadius * 0.95f * sin(angle)).toFloat()
-                    val x2 = cx + (rayLen * cos(angle)).toFloat()
-                    val y2 = cy + (rayLen * sin(angle)).toFloat()
-                    drawLine(
-                        brush = Brush.linearGradient(
-                            colors = listOf(palette.ringColor.copy(alpha = 0.85f), Color.Transparent),
-                            start = Offset(x1, y1),
-                            end = Offset(x2, y2)
-                        ),
-                        start = Offset(x1, y1),
-                        end = Offset(x2, y2),
-                        strokeWidth = 3.dp.toPx(),
-                        cap = StrokeCap.Round
-                    )
-                }
-            }
-
-            // 3. Outer Titanium Ring Casing
+            // Reflection / glow circle underneath
             drawCircle(
-                color = if (isServiceRunning) Color(0xFF0D1726) else Color(0xFF111827),
+                brush = Brush.radialGradient(
+                    colors = listOf(primaryColor.copy(alpha = 0.35f), Color.Transparent),
+                    center = Offset(cx, cy + baseRadius * 1.25f),
+                    radius = baseRadius * 1.5f
+                ),
+                radius = baseRadius * 1.5f,
+                center = Offset(cx, cy + baseRadius * 1.25f)
+            )
+
+            // 2. Outer Titanium Ring Casing
+            drawCircle(
+                color = Color(0xFF0A0F1D),
                 radius = baseRadius,
                 center = Offset(cx, cy)
             )
             drawCircle(
-                color = palette.ringColor.copy(alpha = if (isServiceRunning) 0.85f else 0.3f),
+                color = primaryColor.copy(alpha = 0.9f),
                 radius = baseRadius,
                 center = Offset(cx, cy),
-                style = Stroke(width = 3.5.dp.toPx())
+                style = Stroke(width = 4.5.dp.toPx())
             )
 
-            // 4. 10 Arc Reactor Copper & Plasma Induction Coils
-            val coilInner = baseRadius * 0.52f
-            val coilOuter = baseRadius * 0.88f
-            for (i in 0 until 10) {
-                val coilAngleDeg = i * 36.0 + outerRotation
+            // 3. Concentric Ring with Clock/Tachometer Tick Marks (Ring 1 - Rotating clockwise)
+            val ring1Radius = baseRadius * 0.86f
+            drawCircle(
+                color = secondaryColor.copy(alpha = 0.55f),
+                radius = ring1Radius,
+                center = Offset(cx, cy),
+                style = Stroke(width = 1.5.dp.toPx())
+            )
+            val tickCount = 36
+            for (i in 0 until tickCount) {
+                val tickAngle = Math.toRadians((i * (360.0 / tickCount) + outerRotation).toDouble())
+                val tX1 = cx + (ring1Radius * 0.92f * cos(tickAngle)).toFloat()
+                val tY1 = cy + (ring1Radius * 0.92f * sin(tickAngle)).toFloat()
+                val tX2 = cx + (ring1Radius * 1.06f * cos(tickAngle)).toFloat()
+                val tY2 = cy + (ring1Radius * 1.06f * sin(tickAngle)).toFloat()
+                drawLine(
+                    color = primaryColor.copy(alpha = if (i % 3 == 0) 0.95f else 0.45f),
+                    start = Offset(tX1, tY1),
+                    end = Offset(tX2, tY2),
+                    strokeWidth = if (i % 3 == 0) 2.dp.toPx() else 1.dp.toPx()
+                )
+            }
+
+            // 4. Dashed Concentric Ring (Ring 2 - Rotating counter-clockwise)
+            val ring2Radius = baseRadius * 0.66f
+            val dashPathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(14f, 10f), innerRotation)
+            drawCircle(
+                color = secondaryColor.copy(alpha = 0.75f),
+                radius = ring2Radius,
+                center = Offset(cx, cy),
+                style = Stroke(
+                    width = 3.dp.toPx(),
+                    pathEffect = dashPathEffect
+                )
+            )
+
+            // 5. 8 Copper / Plasma Induction Coils pointing inward
+            val coilInner = baseRadius * 0.42f
+            val coilOuter = baseRadius * 0.58f
+            for (i in 0 until 8) {
+                val coilAngleDeg = i * 45.0 + (outerRotation * 0.5)
                 val rad = Math.toRadians(coilAngleDeg)
                 val cosA = cos(rad).toFloat()
                 val sinA = sin(rad).toFloat()
@@ -941,69 +895,53 @@ fun JarvisArcReactorCore(
                 val x2 = cx + (coilOuter * cosA)
                 val y2 = cy + (coilOuter * sinA)
 
-                // Coil wire
                 drawLine(
-                    color = if (isServiceRunning) palette.coilColor else Color(0xFF374151),
+                    color = secondaryColor,
                     start = Offset(x1, y1),
                     end = Offset(x2, y2),
-                    strokeWidth = 5.dp.toPx(),
+                    strokeWidth = 4.5.dp.toPx(),
                     cap = StrokeCap.Round
                 )
-
-                // Inner luminous spark on coil tip
-                if (isServiceRunning) {
-                    drawCircle(
-                        color = palette.arcColor,
-                        radius = 2.dp.toPx(),
-                        center = Offset(x2, y2)
-                    )
-                }
-            }
-
-            // 5. Dual Rotating Magnetic Containment Rings
-            val midRingRadius = baseRadius * 0.50f
-            drawCircle(
-                color = palette.ringColor.copy(alpha = if (isServiceRunning) 0.65f else 0.25f),
-                radius = midRingRadius,
-                center = Offset(cx, cy),
-                style = Stroke(width = 2.dp.toPx())
-            )
-
-            // Inner tick marks
-            for (i in 0 until 24) {
-                val tickAngle = Math.toRadians((i * 15.0 + innerRotation).toDouble())
-                val tX1 = cx + (midRingRadius * 0.90f * cos(tickAngle)).toFloat()
-                val tY1 = cy + (midRingRadius * 0.90f * sin(tickAngle)).toFloat()
-                val tX2 = cx + (midRingRadius * 1.05f * cos(tickAngle)).toFloat()
-                val tY2 = cy + (midRingRadius * 1.05f * sin(tickAngle)).toFloat()
-                drawLine(
-                    color = palette.arcColor.copy(alpha = if (isServiceRunning) 0.5f else 0.15f),
-                    start = Offset(tX1, tY1),
-                    end = Offset(tX2, tY2),
-                    strokeWidth = 1.2.dp.toPx()
+                drawCircle(
+                    color = Color.White,
+                    radius = 2.dp.toPx(),
+                    center = Offset(x2, y2)
                 )
             }
 
-            // 6. Central Arc Reactor Core (Palladium / Vibranium Core)
-            val coreRadius = baseRadius * 0.36f
-            val coreLightCenter = Offset(cx - coreRadius * 0.25f, cy - coreRadius * 0.25f)
+            // 6. Floating Specular Particles around rings
+            for (i in 0 until 6) {
+                val pAngle = Math.toRadians((i * 60.0 - outerRotation * 1.5)).toFloat()
+                val pDist = baseRadius * 0.76f
+                val pX = cx + (pDist * cos(pAngle))
+                val pY = cy + (pDist * sin(pAngle))
+                drawCircle(
+                    color = Color.White.copy(alpha = 0.9f),
+                    radius = 3.5.dp.toPx(),
+                    center = Offset(pX, pY)
+                )
+            }
+
+            // 7. Center Core Orb with 3D Glass Depth (Radial Gradient)
+            val coreRadius = baseRadius * 0.40f
+            val coreLightCenter = Offset(cx - coreRadius * 0.3f, cy - coreRadius * 0.3f)
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(
-                        palette.coreGlow,
-                        palette.arcColor,
-                        palette.ringColor,
+                        Color.White,
+                        primaryColor,
+                        secondaryColor,
                         Color(0xFF020617)
                     ),
                     center = coreLightCenter,
-                    radius = coreRadius * 1.3f
+                    radius = coreRadius * 1.4f
                 ),
                 radius = coreRadius,
                 center = Offset(cx, cy)
             )
 
-            // Triangular Arc Core Inlay (Classic Iron Man Reactor Motif)
-            val triRadius = coreRadius * 0.72f
+            // 8. Central Triangle / Logo Inlay (Classic Iron Man Reactor Motif)
+            val triRadius = coreRadius * 0.65f
             val triAngle = Math.toRadians(innerRotation.toDouble())
             val p1X = cx + (triRadius * cos(triAngle)).toFloat()
             val p1Y = cy + (triRadius * sin(triAngle)).toFloat()
@@ -1020,22 +958,21 @@ fun JarvisArcReactorCore(
             }
             drawPath(
                 path = triPath,
-                color = Color.White.copy(alpha = if (isServiceRunning) 0.85f else 0.2f),
+                color = Color.White.copy(alpha = 0.95f),
                 style = Stroke(width = 2.dp.toPx())
             )
 
-            // Specular Glass Core Reflection
+            // Specular Glass Reflection on Core
             drawCircle(
                 brush = Brush.radialGradient(
-                    colors = listOf(Color.White.copy(alpha = if (isServiceRunning) 0.8f else 0.25f), Color.Transparent),
+                    colors = listOf(Color.White.copy(alpha = 0.9f), Color.Transparent),
                     center = coreLightCenter,
-                    radius = coreRadius * 0.4f
+                    radius = coreRadius * 0.45f
                 ),
-                radius = coreRadius * 0.4f,
+                radius = coreRadius * 0.45f,
                 center = coreLightCenter
             )
         }
-
     }
 }
 
@@ -1618,37 +1555,7 @@ fun VoiceAssistantSettingsTab(
             }
         }
 
-        // Edge Lighting Across All Apps Toggle
-        var edgeLightingEnabled by remember { mutableStateOf(zoyaPrefs.getBoolean("edge_lighting_enabled", true)) }
-        Card(
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)),
-            shape = RoundedCornerShape(12.dp),
-            border = BorderStroke(1.dp, Color(0xFF2A2A2A))
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(12.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Full Screen Edge Lighting", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                    Text("YouTube, Instagram आदि सभी ऐप्स पर चारों किनारों पर रंगीन लाइट (Red/Blue/Green/Yellow)", color = Color.Gray, fontSize = 11.sp)
-                }
-                Switch(
-                    checked = edgeLightingEnabled,
-                    onCheckedChange = { checked ->
-                        edgeLightingEnabled = checked
-                        zoyaPrefs.edit().putBoolean("edge_lighting_enabled", checked).apply()
-                    },
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = Color.Black,
-                        checkedTrackColor = Color(0xFFFFD700)
-                    )
-                )
-            }
-        }
+
 
         // 4. CONNECTIONS (Gemini & Groq API Keys)
         var geminiKey by remember { mutableStateOf(zoyaPrefs.getString("gemini_api_key", "") ?: "") }

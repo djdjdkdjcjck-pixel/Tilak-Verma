@@ -52,7 +52,6 @@ class ZoyaForegroundService : Service() {
     private var audioRecord: AudioRecord? = null
     private var audioTrack: AudioTrack? = null
     private var floatingOverlay: JoyaFloatingOverlay? = null
-    private var edgeLightingOverlay: com.example.overlay.JarvisEdgeLightingOverlay? = null
     private var wakeLock: android.os.PowerManager.WakeLock? = null
     private var audioManager: AudioManager? = null
     private var audioFocusRequest: AudioFocusRequest? = null
@@ -164,25 +163,19 @@ class ZoyaForegroundService : Service() {
         createNotificationChannel()
         startForegroundNotification("Jarvis Voice Assistant", "Jarvis बैकग्राउंड में सक्रिय है। बोलें 'Jarvis'...")
 
-        edgeLightingOverlay = com.example.overlay.JarvisEdgeLightingOverlay(this)
-        edgeLightingOverlay?.show()
+        floatingOverlay = JoyaFloatingOverlay(this)
+        floatingOverlay?.show()
 
         scope.launch {
             liveSessionManager.zoyaState.collect { state ->
                 _currentState.value = state
                 updateNotificationForState(state)
-                edgeLightingOverlay?.updateState(state)
+                floatingOverlay?.updateState(state)
             }
         }
 
         initAudioTrack()
         startMicrophoneLoop()
-
-        // Speak startup confirmation
-        scope.launch {
-            kotlinx.coroutines.delay(800)
-            liveSessionManager.ttsManager.speak("Jarvis active hai, Boss.")
-        }
     }
 
     private fun interruptPlayback() {
@@ -211,9 +204,10 @@ class ZoyaForegroundService : Service() {
             Log.i(TAG, "Authorized user verified with ${(verification.confidence * 100).toInt()}% confidence.")
         }
 
-        Log.i(TAG, "Wake word triggered! Activating high-speed command listener.")
+        Log.i(TAG, "Wake word triggered! Speaking 'Ji boss' and starting mic instantly.")
         triggerHaptic()
         _currentState.value = ZoyaState.LISTENING
+        liveSessionManager.ttsManager.speak("Ji boss")
         fastVoiceCommander.startListening()
         liveSessionManager.startSession()
     }
@@ -439,8 +433,6 @@ class ZoyaForegroundService : Service() {
         try { liveSessionManager.ttsManager.shutdown() } catch (e: Exception) {}
         try { floatingOverlay?.hide() } catch (e: Exception) {}
         floatingOverlay = null
-        try { edgeLightingOverlay?.hide() } catch (e: Exception) {}
-        edgeLightingOverlay = null
 
         try {
             if (wakeLock?.isHeld == true) {
