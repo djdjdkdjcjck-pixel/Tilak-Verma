@@ -1,3 +1,4 @@
+// Jarvis settings screen
 package com.example.ui
 
 import android.Manifest
@@ -58,6 +59,7 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Wallpaper
 import androidx.compose.material3.AlertDialog
@@ -128,9 +130,7 @@ fun ZoyaScreen(
     var customPictureUri by remember { mutableStateOf(prefs.getString("joya_custom_image", null)) }
 
     var showPermissionsDialog by remember { mutableStateOf(!isPermissionGranted) }
-    var showSettingsHubDialog by remember { mutableStateOf(false) }
-
-    var textCommandInput by remember { mutableStateOf("") }
+    var currentScreen by remember { mutableStateOf("main") } // "main" or "settings"
 
     val activeService = ZoyaForegroundService.activeService
     val zoyaState = ZoyaForegroundService.currentState.collectAsState().value
@@ -138,19 +138,6 @@ fun ZoyaScreen(
     val liveManager = activeService?.liveSessionManager
     val micLevel = liveManager?.micLevel?.collectAsState()?.value ?: 0f
     val speakerLevel = liveManager?.speakerLevel?.collectAsState()?.value ?: 0f
-    val statusText = liveManager?.lastSpokenText?.collectAsState()?.value
-        ?: if (activeService == null) "Joya बंद है। सेटिंग्स से चालू करें।" else "Joya सक्रिय है। 'Joya' बोलें या कमांड दें।"
-
-    // Photo picker launcher
-    val photoPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickVisualMedia()
-    ) { uri ->
-        if (uri != null) {
-            val uriStr = uri.toString()
-            prefs.edit().putString("joya_custom_image", uriStr).apply()
-            customPictureUri = uriStr
-        }
-    }
 
     val edgeTransition = rememberInfiniteTransition(label = "EdgeGlowTransition")
     val edgePulse by edgeTransition.animateFloat(
@@ -174,131 +161,102 @@ fun ZoyaScreen(
     val insetsTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val insetsBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFF000000))
-            .padding(top = insetsTop, bottom = insetsBottom)
-    ) {
-        // Colorful Edge / Border Glow Lighting Effect around screen edges
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val strokeWidth = 5.dp.toPx()
-            val w = size.width
-            val h = size.height
-
-            // Outer edge glow
-            drawRect(
-                color = edgeColor.copy(alpha = edgePulse * 0.85f),
-                topLeft = Offset.Zero,
-                size = size,
-                style = Stroke(width = strokeWidth)
-            )
-
-            // Inner soft ambient glow line
-            drawRect(
-                color = edgeColor.copy(alpha = edgePulse * 0.35f),
-                topLeft = Offset(strokeWidth, strokeWidth),
-                size = Size(w - strokeWidth * 2, h - strokeWidth * 2),
-                style = Stroke(width = strokeWidth * 0.6f)
-            )
-        }
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 20.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Spacer(modifier = Modifier.weight(1f))
-
-            // CENTER VISUAL: SUN / ORB ANIMATION
-            Box(
-                modifier = Modifier
-                    .size(280.dp)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) {
-                        if (activeService == null) {
-                            if (!isPermissionGranted) {
-                                showPermissionsDialog = true
-                            } else {
-                                onStartService()
-                            }
-                        } else {
-                            onStopService()
-                        }
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                if (customPictureUri != null) {
-                    CustomPictureFrame(
-                        imageUri = customPictureUri!!,
-                        state = zoyaState,
-                        micLevel = micLevel,
-                        speakerLevel = speakerLevel,
-                        isServiceRunning = activeService != null
-                    )
-                } else {
-                    JarvisArcReactorCore(
-                        state = zoyaState,
-                        micLevel = micLevel,
-                        speakerLevel = speakerLevel,
-                        isServiceRunning = activeService != null
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.weight(1f))
-
-            // BOTTOM STATUS BAR
-            CleanDiscreetStatusIndicator(isServiceRunning = activeService != null)
-
-            Spacer(modifier = Modifier.height(24.dp))
-        }
-    }
-
-    // Settings & Memory Hub Dialog
-    if (showSettingsHubDialog) {
-        SettingsAndMemoryHubDialog(
-            toolEngine = activeService?.toolEngine ?: com.example.tools.ToolExecutionEngine(context),
-            isServiceRunning = activeService != null,
+    if (currentScreen == "settings") {
+        JarvisSettingsScreen(
+            onBack = { currentScreen = "main" },
             onStartService = onStartService,
             onStopService = onStopService,
-            onOpenPermissions = { showPermissionsDialog = true },
-            hasCustomPicture = customPictureUri != null,
-            onPickFromGallery = {
-                photoPickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                showSettingsHubDialog = false
-            },
-            onRemoveCustomPicture = {
-                prefs.edit().remove("joya_custom_image").apply()
-                customPictureUri = null
-            },
-            onOpenWallpaperSettings = {
-                val intent = Intent(Intent.ACTION_SET_WALLPAPER).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                try { context.startActivity(intent) } catch (e: Exception) {}
-            },
-            onExecuteCommand = { cmd ->
-                if (activeService != null) {
-                    activeService.liveSessionManager.executeLocalOrMultiCommand(cmd)
-                } else {
-                    val toolEngine = com.example.tools.ToolExecutionEngine(context)
-                    toolEngine.openApp(cmd)
-                }
-            },
-            onAppClick = { appName ->
-                if (activeService != null) {
-                    activeService.liveSessionManager.executeLocalOrMultiCommand("$appName kholo")
-                } else {
-                    val toolEngine = com.example.tools.ToolExecutionEngine(context)
-                    toolEngine.openApp(appName)
-                }
-            },
-            onDismiss = { showSettingsHubDialog = false }
+            isServiceRunning = activeService != null
         )
+    } else {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0xFF000000))
+                .padding(top = insetsTop, bottom = insetsBottom)
+        ) {
+            // Colorful Edge / Border Glow Lighting Effect around screen edges
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val strokeWidth = 5.dp.toPx()
+                val w = size.width
+                val h = size.height
+
+                // Outer edge glow
+                drawRect(
+                    color = edgeColor.copy(alpha = edgePulse * 0.85f),
+                    topLeft = Offset.Zero,
+                    size = size,
+                    style = Stroke(width = strokeWidth)
+                )
+
+                // Inner soft ambient glow line
+                drawRect(
+                    color = edgeColor.copy(alpha = edgePulse * 0.35f),
+                    topLeft = Offset(strokeWidth, strokeWidth),
+                    size = Size(w - strokeWidth * 2, h - strokeWidth * 2),
+                    style = Stroke(width = strokeWidth * 0.6f)
+                )
+            }
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                // Top bar with top-right round gear button
+                MasterTopBar(
+                    onOpenSettings = { currentScreen = "settings" }
+                )
+
+                Spacer(modifier = Modifier.weight(1f))
+
+                // CENTER VISUAL: SUN / ORB ANIMATION
+                Box(
+                    modifier = Modifier
+                        .size(280.dp)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) {
+                            if (activeService == null) {
+                                if (!isPermissionGranted) {
+                                    showPermissionsDialog = true
+                                } else {
+                                    onStartService()
+                                }
+                            } else {
+                                onStopService()
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (customPictureUri != null) {
+                        CustomPictureFrame(
+                            imageUri = customPictureUri!!,
+                            state = zoyaState,
+                            micLevel = micLevel,
+                            speakerLevel = speakerLevel,
+                            isServiceRunning = activeService != null
+                        )
+                    } else {
+                        JarvisArcReactorCore(
+                            state = zoyaState,
+                            micLevel = micLevel,
+                            speakerLevel = speakerLevel,
+                            isServiceRunning = activeService != null
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.weight(1f))
+
+                // BOTTOM STATUS BAR
+                CleanDiscreetStatusIndicator(isServiceRunning = activeService != null)
+
+                Spacer(modifier = Modifier.height(24.dp))
+            }
+        }
     }
 
     // Permissions Dialog
@@ -314,54 +272,339 @@ fun ZoyaScreen(
 }
 
 /**
- * Top bar featuring Title and Settings Hub button.
- * Clean, unobstructed layout: 100% free of clutter and manual clutter buttons.
+ * Top bar featuring Jarvis Title and Settings round gear button.
  */
 @Composable
 fun MasterTopBar(
-    onOpenSettingsHub: () -> Unit
+    onOpenSettings: () -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp),
+            .padding(vertical = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // App Title
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = "JOYA",
-                color = Color(0xFFFFD700),
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 4.sp
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = "ASSISTANT",
-                color = Color(0xFF888888),
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold,
-                letterSpacing = 1.sp
-            )
-        }
+        Text(
+            text = "JARVIS",
+            color = Color(0xFFFFD700),
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 4.sp
+        )
 
-        // Settings Hub Button (Clean single control)
+        // Round gear settings button, always visible
         IconButton(
-            onClick = onOpenSettingsHub,
+            onClick = onOpenSettings,
             modifier = Modifier
-                .size(40.dp)
-                .background(Color(0xFF141414), CircleShape)
+                .size(44.dp)
+                .background(Color(0xFF161616), CircleShape)
                 .border(1.dp, Color(0xFF2E2E2E), CircleShape)
         ) {
             Icon(
                 imageVector = Icons.Default.Settings,
-                contentDescription = "Settings Hub",
+                contentDescription = "Settings",
                 tint = Color(0xFFFFD700),
-                modifier = Modifier.size(20.dp)
+                modifier = Modifier.size(22.dp)
             )
         }
+    }
+}
+
+/**
+ * Dedicated Jarvis Settings Screen with back arrow, master switch, status line, edge lights switch, API keys, and permission buttons.
+ */
+@Composable
+fun JarvisSettingsScreen(
+    onBack: () -> Unit,
+    onStartService: () -> Unit,
+    onStopService: () -> Unit,
+    isServiceRunning: Boolean
+) {
+    val context = LocalContext.current
+    val zoyaPrefs = remember { context.getSharedPreferences("ZoyaPrefs", Context.MODE_PRIVATE) }
+
+    var jarvisEnabled by remember {
+        mutableStateOf(zoyaPrefs.getBoolean("jarvis_master_enabled", isServiceRunning))
+    }
+    var edgeLightsEnabled by remember {
+        mutableStateOf(zoyaPrefs.getBoolean("edge_lighting_enabled", true))
+    }
+    var geminiKeyInput by remember {
+        mutableStateOf(zoyaPrefs.getString("gemini_api_key", "") ?: "")
+    }
+    var groqKeysInput by remember {
+        mutableStateOf(zoyaPrefs.getString("groq_api_keys", "") ?: "")
+    }
+
+    val hasOverlayPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        AndroidSettings.canDrawOverlays(context)
+    } else true
+
+    val statusLine = when {
+        !hasOverlayPermission -> "Overlay permission nahi hai"
+        geminiKeyInput.isBlank() -> "Gemini key nahi hai"
+        !jarvisEnabled || !isServiceRunning -> "Band hai"
+        else -> "Sun raha hai"
+    }
+
+    val insetsTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val insetsBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF000000))
+            .padding(top = insetsTop, bottom = insetsBottom)
+            .padding(horizontal = 16.dp)
+            .verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.Start
+    ) {
+        // Top bar with back arrow
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(
+                    imageVector = Icons.Default.ArrowBack,
+                    contentDescription = "Back",
+                    tint = Color(0xFFFFD700)
+                )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "Jarvis Settings",
+                color = Color.White,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // 1. Jarvis Master Switch
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF141414)),
+            shape = RoundedCornerShape(16.dp),
+            border = BorderStroke(1.dp, Color(0xFF262626))
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "Jarvis",
+                        color = Color.White,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "Master ON/OFF switch",
+                        color = Color.Gray,
+                        fontSize = 12.sp
+                    )
+                }
+                Switch(
+                    checked = jarvisEnabled,
+                    onCheckedChange = { enabled ->
+                        jarvisEnabled = enabled
+                        zoyaPrefs.edit().putBoolean("jarvis_master_enabled", enabled).apply()
+                        if (enabled) {
+                            onStartService()
+                        } else {
+                            onStopService()
+                        }
+                    },
+                    colors = SwitchDefaults.colors(checkedThumbColor = Color(0xFFFFD700))
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // 2. Status Line
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF141414)),
+            shape = RoundedCornerShape(16.dp),
+            border = BorderStroke(1.dp, Color(0xFF262626))
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Status",
+                    color = Color.Gray,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = statusLine,
+                    color = when (statusLine) {
+                        "Sun raha hai" -> Color(0xFF00E676)
+                        "Band hai" -> Color(0xFFFFEA00)
+                        else -> Color(0xFFFF5252)
+                    },
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // 3. Edge Lights Switch
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF141414)),
+            shape = RoundedCornerShape(16.dp),
+            border = BorderStroke(1.dp, Color(0xFF262626))
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "Edge lights",
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "Four-side glowing screen border",
+                        color = Color.Gray,
+                        fontSize = 12.sp
+                    )
+                }
+                Switch(
+                    checked = edgeLightsEnabled,
+                    onCheckedChange = { enabled ->
+                        edgeLightsEnabled = enabled
+                        zoyaPrefs.edit().putBoolean("edge_lighting_enabled", enabled).apply()
+                    },
+                    colors = SwitchDefaults.colors(checkedThumbColor = Color(0xFFFFD700))
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // 4. Gemini API Key Box & Save
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF141414)),
+            shape = RoundedCornerShape(16.dp),
+            border = BorderStroke(1.dp, Color(0xFF262626))
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Gemini API Key",
+                    color = Color.White,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = geminiKeyInput,
+                    onValueChange = { geminiKeyInput = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("Enter Gemini API Key", color = Color.Gray) },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = {
+                        zoyaPrefs.edit().putString("gemini_api_key", geminiKeyInput).apply()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD700)),
+                    modifier = Modifier.align(Alignment.End)
+                ) {
+                    Text("Save", color = Color.Black, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // 5. Groq Keys Box & Save
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF141414)),
+            shape = RoundedCornerShape(16.dp),
+            border = BorderStroke(1.dp, Color(0xFF262626))
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Groq keys (comma separated)",
+                    color = Color.White,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = groqKeysInput,
+                    onValueChange = { groqKeysInput = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("key1, key2, key3", color = Color.Gray) },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = {
+                        zoyaPrefs.edit().putString("groq_api_keys", groqKeysInput).apply()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD700)),
+                    modifier = Modifier.align(Alignment.End)
+                ) {
+                    Text("Save", color = Color.Black, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // 6. Permission & Battery buttons
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Button(
+                onClick = {
+                    val intent = Intent(AndroidSettings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}"))
+                    try { context.startActivity(intent) } catch (e: Exception) {}
+                },
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF222222))
+            ) {
+                Text("Display over other apps", color = Color.White, fontSize = 11.sp, textAlign = TextAlign.Center)
+            }
+
+            Button(
+                onClick = {
+                    val intent = Intent(AndroidSettings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                    try { context.startActivity(intent) } catch (e: Exception) {}
+                },
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF222222))
+            ) {
+                Text("Battery optimization se chhoot", color = Color.White, fontSize = 11.sp, textAlign = TextAlign.Center)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(32.dp))
     }
 }
 
@@ -1404,6 +1647,96 @@ fun VoiceAssistantSettingsTab(
                         checkedTrackColor = Color(0xFFFFD700)
                     )
                 )
+            }
+        }
+
+        // 4. CONNECTIONS (Gemini & Groq API Keys)
+        var geminiKey by remember { mutableStateOf(zoyaPrefs.getString("gemini_api_key", "") ?: "") }
+        var groqKeys by remember { mutableStateOf(zoyaPrefs.getString("groq_api_keys", "") ?: "") }
+        Card(
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)),
+            shape = RoundedCornerShape(12.dp),
+            border = BorderStroke(1.dp, Color(0xFF2A2A2A))
+        ) {
+            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Connections (API Keys)", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                if (geminiKey.isBlank() || groqKeys.isBlank()) {
+                    Text("⚠️ Key daalo! (Gemini for Voice, Groq keys comma-separated for Chat)", color = Color(0xFFFF5252), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                }
+
+                Text("Gemini API Key (Voice)", color = Color.Gray, fontSize = 11.sp)
+                TextField(
+                    value = geminiKey,
+                    onValueChange = {
+                        geminiKey = it
+                        zoyaPrefs.edit().putString("gemini_api_key", it).apply()
+                    },
+                    placeholder = { Text("Enter Gemini API Key...", color = Color.DarkGray, fontSize = 12.sp) },
+                    singleLine = true,
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = Color(0xFF141414),
+                        unfocusedContainerColor = Color(0xFF101010),
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White
+                    ),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+                Text("Groq API Keys (Chat - comma separated)", color = Color.Gray, fontSize = 11.sp)
+                TextField(
+                    value = groqKeys,
+                    onValueChange = {
+                        groqKeys = it
+                        zoyaPrefs.edit().putString("groq_api_keys", it).apply()
+                    },
+                    placeholder = { Text("key1, key2, key3...", color = Color.DarkGray, fontSize = 12.sp) },
+                    singleLine = true,
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = Color(0xFF141414),
+                        unfocusedContainerColor = Color(0xFF101010),
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White
+                    ),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+
+        // 5. BATTERY OPTIMIZATION & AUTOSTART GUIDE
+        Card(
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)),
+            shape = RoundedCornerShape(12.dp),
+            border = BorderStroke(1.dp, Color(0xFF2A2A2A))
+        ) {
+            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Background & Battery Optimization", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                Text("24 घंटे background में सुनने के लिए बैटरी ऑप्टिमाइजेशन बंद करें:", color = Color.Gray, fontSize = 11.sp)
+                Button(
+                    onClick = {
+                        try {
+                            val intent = Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                                data = Uri.parse("package:${context.packageName}")
+                            }
+                            context.startActivity(intent)
+                        } catch (e: Exception) {
+                            try {
+                                val intent = Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                                context.startActivity(intent)
+                            } catch (ex: Exception) {}
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD700), contentColor = Color.Black),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("Battery Optimization से छूट लें (Exempt)", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+                Text("Xiaomi / Realme / Vivo Autostart Guide:", color = Color(0xFFFFD700), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text("Settings > Apps > Jarvis > Autostart (ऑटोस्टार्ट) को ON करें और Background restrictions को Unrestricted करें।", color = Color.Gray, fontSize = 11.sp)
             }
         }
 

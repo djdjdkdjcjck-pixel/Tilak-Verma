@@ -53,6 +53,30 @@ class ZoyaAccessibilityService : AccessibilityService() {
             return false
         }
 
+        fun readScreenText(): String {
+            val inst = instance ?: return "Accessibility service चालू नहीं है। कृपया सेटिंग से Jarvis Accessibility service enable करें।"
+            val root = inst.rootInActiveWindow ?: return "स्क्रीन पर कोई टेक्स्ट नहीं मिला।"
+            val textList = mutableListOf<String>()
+            collectText(root, textList)
+            val combined = textList.filter { it.isNotBlank() }.distinct().take(30).joinToString(". ")
+            return if (combined.isNotBlank()) combined else "स्क्रीन पर पढ़ने योग्य टेक्स्ट नहीं मिला।"
+        }
+
+        private fun collectText(node: AccessibilityNodeInfo, list: MutableList<String>) {
+            val t = node.text?.toString() ?: node.contentDescription?.toString()
+            if (!t.isNullOrBlank()) {
+                if (!t.contains("password", ignoreCase = true) && !t.contains("pin", ignoreCase = true) && !t.contains("upi", ignoreCase = true)) {
+                    list.add(t)
+                }
+            }
+            for (i in 0 until node.childCount) {
+                val child = node.getChild(i)
+                if (child != null) {
+                    collectText(child, list)
+                }
+            }
+        }
+
         fun dispatchGestureSwipe(startX: Float, startY: Float, endX: Float, endY: Float, durationMs: Long = 250): Boolean {
             val inst = instance ?: return false
             val path = android.graphics.Path().apply {

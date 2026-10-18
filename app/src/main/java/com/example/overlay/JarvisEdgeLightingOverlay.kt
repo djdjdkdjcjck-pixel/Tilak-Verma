@@ -4,10 +4,14 @@ import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.PixelFormat
 import android.graphics.RectF
+import android.graphics.Shader
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.util.Log
 import android.view.Gravity
@@ -18,14 +22,14 @@ import com.example.ZoyaForegroundService
 import com.example.live.ZoyaState
 
 /**
- * Full Screen Edge Lighting Overlay for Jarvis Assistant.
- * Displays smooth glowing lights along all four edges and corners of the phone screen
- * across all applications (YouTube, Instagram, WhatsApp, Chrome, etc.).
+ * Full Screen Four-Side Edge Lighting Overlay for Jarvis Assistant.
+ * Thin, smooth glowing light strips along all 4 edges and all 4 corners.
+ * Overlay over other apps (YouTube, Instagram, Facebook, games) using TYPE_APPLICATION_OVERLAY.
  * Colors:
  * - Listening: RED
- * - Speaking: BLUE
+ * - Speaking: RED
  * - Processing (Thinking): GREEN
- * - Idle / Waiting: YELLOW
+ * - Idle / Waiting: Four-color multicolored animated gradient (Red, Yellow, Green, Blue)
  */
 class JarvisEdgeLightingOverlay(private val service: ZoyaForegroundService) {
 
@@ -36,6 +40,7 @@ class JarvisEdgeLightingOverlay(private val service: ZoyaForegroundService) {
     private val windowManager = service.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
     private var edgeLightView: EdgeLightView? = null
     private var isShowing = false
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     private val layoutParams = WindowManager.LayoutParams().apply {
         width = WindowManager.LayoutParams.MATCH_PARENT
@@ -55,118 +60,159 @@ class JarvisEdgeLightingOverlay(private val service: ZoyaForegroundService) {
     }
 
     fun show() {
-        if (isShowing) return
-        val prefs = service.getSharedPreferences("ZoyaPrefs", Context.MODE_PRIVATE)
-        val edgeEnabled = prefs.getBoolean("edge_lighting_enabled", true)
-        if (!edgeEnabled) {
-            Log.i(TAG, "Edge lighting is disabled in settings.")
-            return
-        }
+        mainHandler.post {
+            if (isShowing) return@post
+            val prefs = service.getSharedPreferences("ZoyaPrefs", Context.MODE_PRIVATE)
+            val edgeEnabled = prefs.getBoolean("edge_lighting_enabled", true)
+            if (!edgeEnabled) {
+                Log.i(TAG, "Edge lighting is disabled in settings.")
+                return@post
+            }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(service)) {
-            Log.w(TAG, "Cannot show edge lighting: SYSTEM_ALERT_WINDOW permission not granted.")
-            return
-        }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(service)) {
+                Log.w(TAG, "Cannot show edge lighting: SYSTEM_ALERT_WINDOW permission not granted.")
+                return@post
+            }
 
-        try {
-            val view = EdgeLightView(service)
-            windowManager?.addView(view, layoutParams)
-            edgeLightView = view
-            isShowing = true
-            Log.i(TAG, "Jarvis full screen edge lighting shown successfully.")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to add edge lighting view", e)
+            try {
+                val view = EdgeLightView(service)
+                windowManager?.addView(view, layoutParams)
+                edgeLightView = view
+                isShowing = true
+                Log.i(TAG, "Jarvis four-side edge lighting shown successfully.")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to add edge lighting view", e)
+            }
         }
     }
 
     fun updateState(state: ZoyaState) {
-        edgeLightView?.setAssistantState(state)
+        mainHandler.post {
+            edgeLightView?.setAssistantState(state)
+        }
     }
 
     fun hide() {
-        if (!isShowing) return
-        try {
-            edgeLightView?.let { windowManager?.removeView(it) }
-            edgeLightView = null
-            isShowing = false
-            Log.i(TAG, "Jarvis edge lighting removed.")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to remove edge lighting view", e)
+        mainHandler.post {
+            if (!isShowing) return@post
+            try {
+                edgeLightView?.let { windowManager?.removeView(it) }
+                edgeLightView = null
+                isShowing = false
+                Log.i(TAG, "Jarvis edge lighting removed.")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to remove edge lighting view", e)
+            }
         }
     }
 
     inner class EdgeLightView(context: Context) : View(context) {
 
         private var currentState = ZoyaState.IDLE
-        private var pulseAlpha = 0.7f
+        private var pulseAlpha = 0.85f
+        private var animProgress = 0f
         private val borderRect = RectF()
 
         private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
-            strokeWidth = 10f // Gorgeous 10px glowing edge
+            strokeWidth = 14f // Thin, smooth, elegant light strip
             strokeCap = Paint.Cap.ROUND
         }
 
         private val outerGlowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
-            strokeWidth = 24f
-            maskFilter = android.graphics.BlurMaskFilter(18f, android.graphics.BlurMaskFilter.Blur.NORMAL)
+            strokeWidth = 32f
+            maskFilter = android.graphics.BlurMaskFilter(16f, android.graphics.BlurMaskFilter.Blur.NORMAL)
         }
 
-        private val pulseAnimator = ValueAnimator.ofFloat(0.4f, 1.0f).apply {
-            duration = 1000L
+        private val animator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 3000L
             repeatCount = ValueAnimator.INFINITE
-            repeatMode = ValueAnimator.REVERSE
             interpolator = LinearInterpolator()
             addUpdateListener {
-                pulseAlpha = it.animatedValue as Float
+                animProgress = it.animatedValue as Float
+                pulseAlpha = 0.7f + 0.3f * kotlin.math.sin(animProgress * 2 * Math.PI).toFloat()
                 postInvalidateOnAnimation()
             }
         }
 
         init {
-            pulseAnimator.start()
-            updateColorForState(ZoyaState.IDLE)
+            animator.start()
+            updateColorsForState(ZoyaState.IDLE)
         }
 
         fun setAssistantState(state: ZoyaState) {
-            if (currentState == state) return
-            currentState = state
-            updateColorForState(state)
-            invalidate()
+            mainHandler.post {
+                if (currentState == state) return@post
+                currentState = state
+                updateColorsForState(state)
+                invalidate()
+            }
         }
 
-        private fun updateColorForState(state: ZoyaState) {
-            val colorHex = when (state) {
-                ZoyaState.LISTENING -> Color.parseColor("#FF1744") // RED
-                ZoyaState.SPEAKING -> Color.parseColor("#2979FF")  // BLUE
-                ZoyaState.THINKING -> Color.parseColor("#00E676")  // GREEN
-                ZoyaState.IDLE -> Color.parseColor("#FFEA00")       // YELLOW
+        private fun updateColorsForState(state: ZoyaState) {
+            when (state) {
+                ZoyaState.LISTENING, ZoyaState.SPEAKING -> {
+                    // RED edge lights
+                    val red = Color.parseColor("#FF1744")
+                    borderPaint.shader = null
+                    borderPaint.color = red
+                    outerGlowPaint.shader = null
+                    outerGlowPaint.color = red
+                }
+                ZoyaState.THINKING -> {
+                    // GREEN edge lights
+                    val green = Color.parseColor("#00E676")
+                    borderPaint.shader = null
+                    borderPaint.color = green
+                    outerGlowPaint.shader = null
+                    outerGlowPaint.color = green
+                }
+                ZoyaState.IDLE -> {
+                    // Four-color multicolored edge lights (handled in onDraw via dynamic gradient)
+                }
             }
-            borderPaint.color = colorHex
-            outerGlowPaint.color = colorHex
         }
 
         override fun onDetachedFromWindow() {
             super.onDetachedFromWindow()
-            pulseAnimator.cancel()
+            animator.cancel()
         }
 
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
             val w = width.toFloat()
             val h = height.toFloat()
+            if (w <= 0f || h <= 0f) return
+
             val stroke = borderPaint.strokeWidth
             val half = stroke / 2f
-
             borderRect.set(half, half, w - half, h - half)
-            val cornerRadius = 32f
+            val cornerRadius = 36f
 
-            // Draw outer ambient glow around all 4 edges and 4 corners
-            outerGlowPaint.alpha = (pulseAlpha * 120).toInt()
+            if (currentState == ZoyaState.IDLE) {
+                // Multicolored four-color shifting gradient across edges
+                val shift = animProgress * w
+                val colors = intArrayOf(
+                    Color.parseColor("#FF1744"), // Red
+                    Color.parseColor("#FFEA00"), // Yellow
+                    Color.parseColor("#00E676"), // Green
+                    Color.parseColor("#2979FF"), // Blue
+                    Color.parseColor("#FF1744")  // Wrap
+                )
+                val shader = LinearGradient(
+                    shift, 0f, shift + w, h,
+                    colors,
+                    null,
+                    Shader.TileMode.REPEAT
+                )
+                borderPaint.shader = shader
+                outerGlowPaint.shader = shader
+            }
+
+            outerGlowPaint.alpha = (pulseAlpha * 180).toInt()
             canvas.drawRoundRect(borderRect, cornerRadius, cornerRadius, outerGlowPaint)
 
-            // Draw sharp glowing border along top, bottom, left, right and corners
             borderPaint.alpha = (pulseAlpha * 255).toInt()
             canvas.drawRoundRect(borderRect, cornerRadius, cornerRadius, borderPaint)
         }

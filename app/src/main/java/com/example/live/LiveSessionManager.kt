@@ -916,6 +916,15 @@ class LiveSessionManager(
                         toolEngine.openQrScanner()
                     }
 
+                    // Read Screen ("screen par kya likha hai padho")
+                    clean.contains("screen par kya") || clean.contains("screen padho") || clean.contains("screen par kya likha") || clean.contains("स्क्रीन पर क्या लिखा है") || (clean.contains("padho") && clean.contains("screen")) || (clean.contains("पढ़ो") && clean.contains("स्क्रीन")) -> {
+                        val screenText = com.example.accessibility.ZoyaAccessibilityService.readScreenText()
+                        val response = "स्क्रीन पर यह लिखा है: $screenText"
+                        _lastSpokenText.value = response
+                        ttsManager.speak(response)
+                        response
+                    }
+
                     // Notifications readout
                     clean.contains("notification padho") || clean.contains("message padho") || clean.contains("मैसेज पढ़ो") -> {
                         toolEngine.readNotifications()
